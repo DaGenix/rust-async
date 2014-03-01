@@ -1,0 +1,9 @@
+# Generated dependancy files
+**/*.d
+
+# Output library files
+*.dylib
+*.rlib
+*.so
+*.o
+
