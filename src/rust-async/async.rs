@@ -58,25 +58,6 @@ impl <'a, Uin> PipelineUp<Uin> for &'a PipelineUp<Uin> {
     }
 }
 
-struct PipelineStageUp<U, F, D> {
-    up: U,
-    filter: *F,
-    down: D
-}
-
-impl <
-        Din, Dout, Uin, Uout,
-        F: Filter<Din, Dout, Uin, Uout>,
-        U: PipelineUp<Uout>,
-        D: PipelineDown<Dout>
-     >
-        PipelineUp<Uin>
-        for PipelineStageUp<U, F, D> {
-    fn up(&self, data: Uin) {
-        unsafe { self.filter.to_option() }.unwrap().up(data, &self.up, &self.down);
-    }
-}
-
 struct PipelineStageDown<U, F, D> {
     up: U,
     filter: ~F,
@@ -93,6 +74,24 @@ impl <
         for PipelineStageDown<U, F, D> {
     fn down(&self, data: Din) {
         self.filter.down(data, &self.up, &self.down);
+    }
+}
+
+struct PipelineStageRef<S> {
+    stage: *S
+}
+
+impl <
+        Din, Dout, Uin, Uout,
+        F: Filter<Din, Dout, Uin, Uout>,
+        U: PipelineUp<Uout>,
+        D: PipelineDown<Dout>
+     >
+        PipelineUp<Uin>
+        for PipelineStageRef<PipelineStageDown<U, F, D>> {
+    fn up(&self, data: Uin) {
+        let s = unsafe { self.stage.to_option().unwrap() };
+        s.filter.up(data, &s.up, &s.down);
     }
 }
 
@@ -153,79 +152,79 @@ impl <
         Din, Dout, Uin, Uout: Send,
         F: Filter<Din, Dout, Uin, Uout> + Send,
         D: PipelineDown<Dout> + Send,
-        N: BuildStage<Dout, D>
+        N: BuildStage<Dout, Uin, D>
      >
         PipelineBuilder<F, N> {
     fn build(self) -> ~PipelineDown<Din> {
         let PipelineBuilder {filter, next} = self;
 
-        let any_up: ~AnyUp<Uout> = ~AnyUp;
-        let up = any_up as ~PipelineUp<Uout>;
+        let up: AnyUp<Uout> = AnyUp;
+
+        let mut me: ~PipelineStageRef<PipelineStageDown<AnyUp<Uout>, F, D>> = ~PipelineStageRef {
+            stage: ptr::null()
+        };
+
+        let me_stage_ptr: *mut *PipelineStageDown<AnyUp<Uout>, F, D> = &mut me.stage;
+
+        let me_obj = me as ~PipelineUp<Uin>;
 
         let ps = ~PipelineStageDown {
             up: up,
             filter: filter,
-            down: next.build_stage()
+            down: next.build_stage(me_obj)
         };
-//        let me: *PipelineStageDown<Void, F, D> = &*ps;
-//        ps.setup(me);
+
+        // TODO - fixme
+        unsafe { *me_stage_ptr = ptr::null(); }
+
         ps as ~PipelineDown<Din>
     }
 }
 
 
-
-/*
-struct PipelineDownRef<D> {
-    pipeline_down: *D
-}
-
-impl <Din> PipelineDown<Din> for PipelineDownRef<?> {
-
-}
-*/
-
-struct Pipeline<U, D> {
-    up_head: U,
-    down_head: D
-}
-
-
-
-
-
-trait BuildStage<Din, S: PipelineDown<Din>> {
-    fn build_stage(self) -> S;
+trait BuildStage<Din, Uout, S: PipelineDown<Din>> {
+    fn build_stage(self, up: ~PipelineUp<Uout>) -> S;
 }
 
 impl <
-        Din, Dout, Uin, Uout,
+        Din, Dout, Uin, Uout: Send,
         F: Filter<Din, Dout, Uin, Uout> + Send,
         D: PipelineDown<Dout> + Send,
-        N: BuildStage<Dout, D>
+        N: BuildStage<Dout, Uin, D>
      >
-        BuildStage<Din, PipelineStageDown<~PipelineUp<Uout>, F, D>>
+        BuildStage<Din, Uout, PipelineStageDown<~PipelineUp<Uout>, F, D>>
         for PipelineBuilder<F, N> {
-    fn build_stage(self) -> PipelineStageDown<~PipelineUp<Uout>, F, D> {
+    fn build_stage(self, up: ~PipelineUp<Uout>) -> PipelineStageDown<~PipelineUp<Uout>, F, D> {
         let PipelineBuilder {filter, next} = self;
 
-        let any_up: ~AnyUp<Uout> = ~AnyUp;
-        let up = any_up as ~PipelineUp<Uout>;
+        let mut me: ~PipelineStageRef<PipelineStageDown<~PipelineUp<Uout>, F, D>> = ~PipelineStageRef {
+            stage: ptr::null()
+        };
+
+        let me_stage_ptr: *mut *PipelineStageDown<~PipelineUp<Uout>, F, D> = &mut me.stage;
+
+        let me_obj = me as ~PipelineUp<Uin>;
 
         let ps = PipelineStageDown {
             up: up,
             filter: filter,
-            down: next.build_stage()
+            down: next.build_stage(me_obj)
         };
+
+        // TODO - fixme
+        unsafe { *me_stage_ptr = ptr::null(); }
+
         ps
     }
 }
 
-impl <Din> BuildStage<Din, AnyDown<Din>> for PipelineTerm {
-    fn build_stage(self) -> AnyDown<Din> {
+impl <Din> BuildStage<Din, (), AnyDown<Din>> for PipelineTerm {
+    fn build_stage(self, _: ~PipelineUp<()>) -> AnyDown<Din> {
         AnyDown
     }
 }
+
+
 
 /*
 trait PipelineSetup<Uout, U: PipelineUp<Uout>> {
@@ -247,6 +246,8 @@ impl <
     }
 }
 */
+
+
 
 #[main]
 fn main() {
@@ -287,6 +288,7 @@ impl Filter<u64, u32, u32, u64> for U64ToU32Filter {
 
     fn up<L: PipelineUp<u64>, N: PipelineDown<u32>>(&self, data: u32, last: &L, next: &N) {
         last.up(data as u64);
+        println!("bai!");
     }
 }
 
@@ -296,6 +298,7 @@ impl Filter<u32, u16, u16, u32> for U32ToU16Filter {
     fn down<L: PipelineUp<u32>, N: PipelineDown<u16>>(&self, data: u32, last: &L, next: &N) {
         println!("hi32");
         next.down(data as u16);
+        last.up(data);
     }
 
     fn up<L: PipelineUp<u32>, N: PipelineDown<u16>>(&self, data: u16, last: &L, next: &N) {
