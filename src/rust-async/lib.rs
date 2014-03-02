@@ -10,3 +10,5 @@
 extern crate extra;
 
 pub mod async;
+pub mod pipeline;
+

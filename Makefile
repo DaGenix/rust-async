@@ -17,7 +17,9 @@ all: rust-async
 check: check-rust-async
 
 .PHONY : clean
-clean: clean-rust-async
+clean: clean-rust-async clean-rust-async-example
 
 $(eval $(call RUST_CRATE,1,src/rust-async/lib.rs,rlib,))
+$(eval $(call RUST_CRATE,2,src/example/example.rs,bin,-L .))
 
+example: $(1_rust_crate_out) rust-async-example
