@@ -5,7 +5,7 @@
 // except according to those terms.
 
 #[license = "MIT/ASL2"];
-#[crate_id = "github.com/DaGenix/rust-async-example#rust-async-example:0.1"];
+#[crate_id = "github.com/DaGenix/rust-async#rust-async-example:0.1"];
 
 extern crate async = "rust-async";
 
@@ -13,51 +13,48 @@ use async::pipeline::{Filter, PipelineBuilder, PipelineDown, PipelineUp};
 
 struct U64ToU32Filter;
 
-#[allow(unused_variable)]
 impl Filter<u64, u32, u32, u64> for U64ToU32Filter {
-    fn down<L: PipelineUp<u64>, N: PipelineDown<u32>>(&self, data: u64, last: &L, next: &N) {
+    fn down<U: PipelineUp<u64>, D: PipelineDown<u32>>(&self, data: u64, _: &U, down: &D) {
         println!("hi64");
-        next.down(data as u32);
+        down.down(data as u32);
     }
 
-    fn up<L: PipelineUp<u64>, N: PipelineDown<u32>>(&self, data: u32, last: &L, next: &N) {
-        last.up(data as u64);
+    fn up<U: PipelineUp<u64>, D: PipelineDown<u32>>(&self, data: u32, up: &U, _: &D) {
+        up.up(data as u64);
         println!("bai!");
     }
 }
 
 struct U32ToU16Filter;
 
-#[allow(unused_variable)]
 impl Filter<u32, u16, u16, u32> for U32ToU16Filter {
-    fn down<L: PipelineUp<u32>, N: PipelineDown<u16>>(&self, data: u32, last: &L, next: &N) {
+    fn down<U: PipelineUp<u32>, D: PipelineDown<u16>>(&self, data: u32, _: &U, down: &D) {
         println!("hi32");
-        next.down(data as u16);
+        down.down(data as u16);
     }
 
-    fn up<L: PipelineUp<u32>, N: PipelineDown<u16>>(&self, data: u16, last: &L, next: &N) {
+    fn up<U: PipelineUp<u32>, D: PipelineDown<u16>>(&self, data: u16, up: &U, _: &D) {
         println!("Stuck in the middle");
-        last.up(data as u32);
+        up.up(data as u32);
     }
 }
 
 struct PrintU16Filter;
 
-#[allow(unused_variable)]
 impl Filter<u16, (), (), u16> for PrintU16Filter {
-    fn down<L: PipelineUp<u16>, N: PipelineDown<()>>(&self, data: u16, last: &L, next: &N) {
+    fn down<U: PipelineUp<u16>, D: PipelineDown<()>>(&self, data: u16, up: &U, _: &D) {
         println!("Value!: {}", data);
-        last.up(data);
+        up.up(data);
     }
 
-    fn up<L: PipelineUp<u16>, N: PipelineDown<()>>(&self, data: (), last: &L, next: &N) {
+    fn up<U: PipelineUp<u16>, D: PipelineDown<()>>(&self, _: (), _: &U, _: &D) {
     }
 }
 
 fn main() {
-    let pipeline = PipelineBuilder::new(~PrintU16Filter)
-        .filter(~U32ToU16Filter)
-        .filter(~U64ToU32Filter)
+    let pipeline = PipelineBuilder::new(PrintU16Filter)
+        .filter(U32ToU16Filter)
+        .filter(U64ToU32Filter)
         .build();
     pipeline.down(65);
 }

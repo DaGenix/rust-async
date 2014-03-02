@@ -5,9 +5,9 @@
 // except according to those terms.
 
 pub trait Filter<Din, Dout, Uin, Uout> {
-    fn down<L: PipelineUp<Uout>, N: PipelineDown<Dout>>(&self, data: Din, last: &L, next: &N);
+    fn down<U: PipelineUp<Uout>, D: PipelineDown<Dout>>(&self, data: Din, up: &U, down: &D);
 
-    fn up<L: PipelineUp<Uout>, N: PipelineDown<Dout>>(&self, data: Uin, last: &L, next: &N);
+    fn up<U: PipelineUp<Uout>, D: PipelineDown<Dout>>(&self, data: Uin, up: &U, down: &D);
 }
 
 pub trait PipelineDown<Din> {
@@ -32,7 +32,7 @@ impl <Uin> PipelineUp<Uin> for ~PipelineUp<Uin> {
 
 struct PipelineStage<U, F, D> {
     up: U,
-    filter: ~F,
+    filter: F,
     down: D
 }
 
@@ -80,14 +80,14 @@ impl <Din> PipelineDown<Din> for AnyDown<Din> {
 }
 
 pub struct PipelineBuilder<F, N> {
-    priv filter: ~F,
+    priv filter: F,
     priv next: N
 }
 
 struct PipelineTerm;
 
 impl <Din, Dout, Uin, Uout, F: Filter<Din, Dout, Uin, Uout>> PipelineBuilder<F, PipelineTerm> {
-    pub fn new(filter: ~F) -> PipelineBuilder<F, PipelineTerm> {
+    pub fn new(filter: F) -> PipelineBuilder<F, PipelineTerm> {
         PipelineBuilder {
             filter: filter,
             next: PipelineTerm
@@ -102,7 +102,7 @@ impl <
         X
      >
         PipelineBuilder<F2, X> {
-    pub fn filter(self, filter: ~F1) -> PipelineBuilder<F1, PipelineBuilder<F2, X>> {
+    pub fn filter(self, filter: F1) -> PipelineBuilder<F1, PipelineBuilder<F2, X>> {
         PipelineBuilder {
             filter: filter,
             next: self
