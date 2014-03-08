@@ -17,14 +17,33 @@ use std::from_str::FromStr;
 
 use sync::MutexArc;
 
-use async::{Selector, Read, SelectNotifier, NotifyEvent};
-use epoll::{epoll_create1, epoll_ctl, epoll_wait, epoll_event, EpollSelector};
+use select::{Selector, SelectNotifier, SelectEvent};
+use epoll_selector::EpollSelector;
 
 use native::io::net::TcpListener;
 
 pub mod async;
 pub mod epoll;
+pub mod epoll_selector;
 pub mod pipeline;
+pub mod select;
+
+struct MyNotifier;
+
+impl SelectNotifier for MyNotifier {
+    fn notify(&self, events: &[SelectEvent]) {
+        println!("Ready!");
+    }
+}
+
+fn main() {
+    let localhost: SocketAddr = FromStr::from_str("127.0.0.1:2323").unwrap();
+    let listener = TcpListener::bind(localhost).unwrap().native_listen(128).unwrap();
+
+    let epoll = EpollSelector::new(MyNotifier).unwrap();
+    let x = epoll.register(listener, 42, select::SelectRead, false);
+    epoll.run();
+}
 
 // fn main() {
 //     let epoll_fd: c_int;
@@ -44,6 +63,7 @@ pub mod pipeline;
 //     }
 // }
 
+/*
 struct MyNotifier;
 
 impl SelectNotifier for MyNotifier {
@@ -60,3 +80,5 @@ fn main() {
     epoll.add(true, listener.fd(), 42, Read);
     epoll.run();
 }
+*/
+
